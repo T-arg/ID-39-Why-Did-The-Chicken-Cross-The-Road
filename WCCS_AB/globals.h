@@ -24,14 +24,21 @@
 #define STATE_GAME_OVER              10
 #define STATE_GAME_FINISHED          12
 
+//define facing directions
+#define EAST                          0
+#define NORTH                         1
+#define WEST                          2
+#define SOUTH                         3
+
 
 // globals ///////////////////////////////////////////////////////////////////
 
 Arduboy2Base arduboy;
 Sprites sprites;
 
-byte gameState = STATE_MENU_INTRO;   // start the game with the intro logo
+byte gameState = STATE_MENU_PLAY;   // start the game with the intro logo
 byte menuSelection = STATE_MENU_PLAY; // PLAY menu item is pre-selected
+byte chickenJumpPattern = 0;
 
 
 #endif
