@@ -30,7 +30,6 @@ const FunctionPointer PROGMEM  mainGameLoop[] =
   stateGamePlaying,
   stateGamePause,
   stateGameOver,
-  stateGameFinished,
 };
 
 
@@ -46,7 +45,6 @@ void loop() {
   if (!(arduboy.nextFrame())) return;
   arduboy.pollButtons();
   arduboy.clear();
-  arduboy.fillRect(0, 0, 128, 64, WHITE);
   ((FunctionPointer) pgm_read_word (&mainGameLoop[gameState]))();
   arduboy.display();
 };
