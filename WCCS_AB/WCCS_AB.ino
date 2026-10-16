@@ -36,7 +36,8 @@ const FunctionPointer PROGMEM  mainGameLoop[] =
 void setup()
 {
   arduboy.boot();
-  arduboy.audio.begin();
+  arduboy.audio.on();
+  if (arduboy.audio.enabled()) ATM.play(silentSong);   // an empty song keeps the playroutine running (music.h)
   arduboy.setFrameRate(45);
   
 };
@@ -44,6 +45,7 @@ void setup()
 void loop() {
   if (!(arduboy.nextFrame())) return;
   arduboy.pollButtons();
+  musicUpdate();
   arduboy.clear();
   ((FunctionPointer) pgm_read_word (&mainGameLoop[gameState]))();
   arduboy.display();

@@ -3,18 +3,22 @@
 
 
 #include "globals.h"
-
+#include "title.h"
 
 void stateMenuIntro()
 {
-  if (arduboy.everyXFrames(30)) gameState = STATE_MENU_MAIN;
-  sprites.drawSelfMasked(49, 20, T_arg, 0);
+  if (introFrame < INTRO_FRAMES) arduboyIntro(introFrame);   // the ARDUBOY letters land on the notes ...
+  else
+  {
+    sprites.drawSelfMasked(49, 20, T_arg, 0);                // ... then the small T-arg logo
+    if (introFrame > INTRO_FRAMES + 52) gameState = STATE_MENU_MAIN;
+  }
+  introFrame++;
 }
 
 void stateMenuMain()
 {
-    arduboy.fillRect(0, 0, 128, 64, WHITE);
-  sprites.drawErase(18, 4, titleChicken, 0);
+  drawTitle();                                  // block letters, road and a hopping chicken (title.h)
   
  
   if (arduboy.justPressed(RIGHT_BUTTON) && (menuSelection < 3))
