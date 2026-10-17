@@ -6,9 +6,8 @@
 #include "playfield.h"
 
 // the screen scrolls forward all the time (the world slides down the screen): stand still too long and you are lost
-#define SCROLL_LAG   12       // world units the scroll line may trail the chicken
-#define LOST_DIST    40       // lost when the camera is this far ahead of the chicken (the chicken is then at the bottom edge)
-int16_t scrollY = 0;
+#define DEAD_START   40       // world units the scroll line starts behind the chicken (5 rows)
+#define DEAD_LAG     80       // the scroll line is never more than this far (10 rows) behind the furthest row reached
 byte    scrollSub = 0;        // 1/16 px
 
 void resetGame()
@@ -17,7 +16,7 @@ void resetGame()
   player.set();
   camX = player.x;
   camY = player.y;
-  scrollY = player.y - SCROLL_LAG;
+  scrollY = player.y - DEAD_START;
   scrollSub = 0;
 }
 
@@ -36,11 +35,11 @@ void updateCamera()
     scrollSub += spd;
     scrollY += scrollSub >> 4;
     scrollSub &= 15;
-    if (scrollY < player.y - SCROLL_LAG) scrollY = player.y - SCROLL_LAG;     // never far behind a chicken that runs ahead
   }
-  int16_t ty = (player.y > scrollY) ? player.y : scrollY;
-  camX += camStep(player.x - camX);
-  camY += camStep(ty - camY);
+  int16_t bestY = player.bestRow * 8;
+  if (scrollY < bestY - DEAD_LAG) scrollY = bestY - DEAD_LAG;   // runs ahead faster than the scroll: the line only trails 10 rows (the lane ring keeps those)
+  camX += camStep(player.x - camX);                             // the camera stays on the chicken
+  camY += camStep(player.y - camY);
 }
 
 void stateMenuPlay()
@@ -63,7 +62,7 @@ void stateGamePlaying()
   updateLanes(cr);
   player.update();
   updateCamera();
-  if (!(player.characteristics & CH_DEAD) && (camY - player.y) > LOST_DIST) player.dieLost();
+  if (!(player.characteristics & CH_DEAD) && player.row() < deadRow()) player.dieLost();   // touched the black
 
   drawPlayField();
 }

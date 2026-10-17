@@ -136,14 +136,14 @@ struct chickenRunner
     bool tryEgg(bool lost)
     {
       if (!eggs || (characteristics & CH_DEAD)) return false;
-      int16_t v0 = lost ? (camY >> 3) + 2 : row() + 1;
+      int16_t v0 = lost ? deadRow() + 2 : row() + 1;
       int16_t col0 = x >> 3;
       if (col0 < PLAY_MIN_U) col0 = PLAY_MIN_U;
       if (col0 > PLAY_MAX_U) col0 = PLAY_MAX_U;
       for (byte k = 0; k < 10; k++)
       {
         int16_t v = v0 + ((k < 7) ? (int16_t)k : 6 - (int16_t)k);       // 7 rows ahead, then 3 back
-        if (laneAt(v).type != LANE_GRASS) continue;
+        if (v < deadRow() || laneAt(v).type != LANE_GRASS) continue;
         for (byte d = 0; d <= (PLAY_MAX_U - PLAY_MIN_U); d++)
         {
           for (int8_t sgn = -1; sgn <= 1; sgn += 2)
@@ -214,7 +214,7 @@ struct chickenRunner
 
       int16_t tu = tx >> 3, tv = ty >> 3;
       if (tu < PLAY_MIN_U || tu > PLAY_MAX_U) return;                // edge of the field
-      if (tv < bestRow - 3) return;                                  // can't go back too far
+      if (tv < bestRow - 12) return;                                 // (the black dead zone ends the walk back long before this)
       if (bushAt(tv, tu)) return;                                    // bush in the way
 
       fromX = x; fromY = y; toX = tx; toY = ty;

@@ -156,8 +156,10 @@ void drawGround()
     const Lane &L = laneAt(v);
     int16_t rr = relY(v);
     if (!bandVisible(rr)) continue;
+    const bool dead = v < deadRow();                    // dead zone: plain black band, no lane data needed
+    const uint8_t lt = dead ? LANE_ROAD : L.type;
 
-    if (L.type == LANE_GRASS)                           // little grass tufts on free cells
+    if (lt == LANE_GRASS)                           // little grass tufts on free cells
     {
       int16_t xlo = camX - rr - SCREEN_CX - 40;
       for (int16_t u = xlo >> 3; u <= ((xlo + 176) >> 3); u++)
@@ -174,7 +176,7 @@ void drawGround()
     int16_t yb = SCREEN_CY - rr - 8;                    // top of the band at x == SCREEN_CX
 
     // dashed line on the border between two road lanes
-    bool dashes = (L.type == LANE_ROAD) && (laneAt(v + 1).type == LANE_ROAD);
+    bool dashes = !dead && (lt == LANE_ROAD) && (laneAt(v + 1).type == LANE_ROAD);
     int16_t dashPhase = camX + camY - 8 * (v + 1) - SCREEN_CX;
 
     for (uint8_t x = 0; x < 128; x++)
@@ -183,7 +185,7 @@ void drawGround()
       if (y <= -8 || y >= 64) continue;
 
       uint8_t val = 0x00;                               // road = black
-      if (L.type == LANE_WATER) val = ((x + (worldFrame >> 4) + v) & 1) ? 0xAA : 0x55;   // shimmering checker
+      if (lt == LANE_WATER) val = ((x + (worldFrame >> 4) + v) & 1) ? 0xAA : 0x55;   // shimmering checker
 
       int8_t  p = y >> 3;                               // display page (floor)
       uint8_t s = y & 7;
@@ -197,7 +199,7 @@ void drawGround()
 
       if (dashes && y >= 0 && (((x + dashPhase) & 15) < 8)) arduboy.drawPixel(x, y, WHITE);
 
-      if (L.type == LANE_RUNWAY)                        // runway: a line along both edges, long dashes down the middle
+      if (lt == LANE_RUNWAY)                        // runway: a line along both edges, long dashes down the middle
       {
         if (L.kind == 1) { if (y >= 0 && y < 64) arduboy.drawPixel(x, y, WHITE); }
         else
@@ -238,6 +240,7 @@ void drawObjects()
 
   for (int16_t v = vc + ROWS_AHEAD; v >= vc - ROWS_BEHIND; v--)
   {
+    if (v < deadRow()) continue;                          // black dead zone: nothing stands there
     const Lane &L = laneAt(v);
     int16_t rr = relY(v);
     if (!bandVisible(rr) && !(L.type == LANE_RUNWAY && L.kind == 1 && bandVisible(rr - 8))) continue;   // (a plane stands on two lanes)
@@ -358,20 +361,20 @@ void drawScore()
 // eggs (lives) top left, active power-ups with a draining bar top right
 static void drawHud()
 {
-  for (byte i = 0; i < player.eggs; i++) sprites.drawPlusMask(2 + i * 10, 1, HUD_plus_mask, 0);
+  for (byte i = 0; i < player.eggs; i++) sprites.drawPlusMask(2 + i * 10, 0, HUD_plus_mask, 0);
   int16_t hx = 128 - 10;
   if (player.hourglass)
   {
-    sprites.drawPlusMask(hx, 1, HUD_plus_mask, 1);
-    arduboy.fillRect(hx - 1, 10, 10, 3, BLACK);
-    arduboy.fillRect(hx, 11, (uint32_t)player.hourglass * 7 / HOURGLASS_TIME + 1, 1, WHITE);
+    sprites.drawPlusMask(hx, 0, HUD_plus_mask, 1);
+    arduboy.fillRect(hx - 1, 9, 10, 3, BLACK);
+    arduboy.fillRect(hx, 10, (uint32_t)player.hourglass * 7 / HOURGLASS_TIME + 1, 1, WHITE);
     hx -= 12;
   }
   if (player.magnet)
   {
-    sprites.drawPlusMask(hx, 1, HUD_plus_mask, 2);
-    arduboy.fillRect(hx - 1, 10, 10, 3, BLACK);
-    arduboy.fillRect(hx, 11, (uint32_t)player.magnet * 7 / MAGNET_TIME + 1, 1, WHITE);
+    sprites.drawPlusMask(hx, 0, HUD_plus_mask, 2);
+    arduboy.fillRect(hx - 1, 9, 10, 3, BLACK);
+    arduboy.fillRect(hx, 10, (uint32_t)player.magnet * 7 / MAGNET_TIME + 1, 1, WHITE);
   }
 }
 

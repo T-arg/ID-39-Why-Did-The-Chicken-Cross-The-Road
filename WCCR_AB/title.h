@@ -117,6 +117,7 @@ byte    titleSub = 0;
 
 void titleWorld()
 {
+  scrollY = -32000;                                     // no dead zone behind the title screen
   if (!titleReady || (camY >> 3) > 3000)                // (re)build the world; also before the rows get too big for int16
   {
     worldInit();

@@ -28,8 +28,8 @@
 #define SCREEN_CX         62      // screen position of the chicken's cell centre
 #define SCREEN_CY         40
 
-#define PLAY_MIN_U        (-6)    // playable columns (13 wide); outside = bush wall
-#define PLAY_MAX_U        6
+#define PLAY_MIN_U        (-8)    // playable columns (17 wide); outside = bush wall
+#define PLAY_MAX_U        8
 
 #define RING              32      // lanes kept in memory (power of 2)
 #define ROWS_BEHIND       7       // rows drawn below the chicken's row
@@ -78,21 +78,26 @@ struct __attribute__((packed)) Lane       // packed: no padding bytes (RAM is ti
   union                // grass and leaf lanes never move, the other lanes have no bushes: they share these 2 bytes
   {
     uint16_t phase;    // moving lanes: 0 .. LANE_LOOP_Q-1  (1/16 px)
-    uint16_t bushMask; // grass: bit (u - PLAY_MIN_U) set = bush;  leaf lane: bit set = leaf
+    uint16_t bushMask; // grass: bit (u - PLAY_MIN_U) set = bush;  leaf lane: bit set = leaf  (bits 16+ live in 'count', see laneMask)
   };
-  uint8_t  item;       // pickup: bits 4..6 = type (ITEM_*), bits 0..3 = column (u - PLAY_MIN_U)
+  uint8_t  item;       // pickup: bits 5..7 = type (ITEM_*), bits 0..4 = column (u - PLAY_MIN_U)
 };
 
 Lane     lanes[RING];
 int16_t  camX = 0, camY = 0;
+int16_t  scrollY = 0;      // the scroll line: rows below it are black (dead zone)
 uint16_t worldFrame = 0;
 
 static inline Lane& laneAt(int16_t v) { return lanes[v & (RING - 1)]; }
 
-static inline uint8_t itemType(const Lane &L) { return L.item >> 4; }
-static inline int16_t itemU(const Lane &L)    { return (int16_t)(L.item & 15) + PLAY_MIN_U; }
+// 17 columns do not fit in 16 bits: grass and leaf lanes keep 'count' (unused there) as the top byte of the mask
+static inline uint32_t laneMask(const Lane &L) { return (uint32_t)L.bushMask | ((uint32_t)L.count << 16); }
+static inline void setLaneMask(Lane &L, uint32_t m) { L.bushMask = (uint16_t)m; L.count = (uint8_t)(m >> 16); }
+static inline uint8_t itemType(const Lane &L) { return L.item >> 5; }
+static inline int16_t itemU(const Lane &L)    { return (int16_t)(L.item & 31) + PLAY_MIN_U; }
 
 // Y of the near edge of row v, relative to the camera
+static inline int16_t deadRow() { return scrollY >> 3; }      // rows below this one are the black dead zone: touch it and you are lost
 static inline int16_t relY(int16_t v) { return (v * 8) - camY; }
 
 
@@ -130,7 +135,7 @@ uint8_t leafStage(int16_t v, int16_t u)
 bool leafAt(const Lane &L, int16_t u)
 {
   if (u < PLAY_MIN_U || u > PLAY_MAX_U) return false;
-  return (L.bushMask >> (u - PLAY_MIN_U)) & 1;
+  return (laneMask(L) >> (u - PLAY_MIN_U)) & 1;
 }
 
 // is there a (not sunk) leaf under a chicken centred on world X = x in row v ?
@@ -148,9 +153,32 @@ struct
   uint8_t runLeft;     // lanes left in this run
   bool    leafRun;     // this water run is made of leaves instead of logs
   int8_t  dir;         // direction for the next moving lane
-  uint8_t pathCol;     // a column that is kept free of bushes, random-walks
+  uint8_t pathA, pathB; // two columns that are kept free of bushes / water, they random-walk (pathA < pathB - 1)
   int16_t top;         // highest row generated so far
 } gen;
+
+// move both guaranteed paths one lane on and open them in the mask (leaf lanes: set the bits, others: clear them).
+// The two paths never touch: their columns stay at least 2 apart and their sideways steps never overlap.
+static void stepPaths(uint32_t &m, bool set)
+{
+  const int8_t W = PLAY_MAX_U - PLAY_MIN_U;
+  int8_t a = (int8_t)gen.pathA + (int8_t)(rnd() % 5) - 2;
+  int8_t b = (int8_t)gen.pathB + (int8_t)(rnd() % 5) - 2;
+  if (a < 0) a = 0;
+  if (a > W - 3) a = W - 3;
+  if (b < a + 2) b = a + 2;
+  if (b > W) b = W;
+  uint8_t loA = (a < gen.pathA) ? a : gen.pathA, hiA = (a < gen.pathA) ? gen.pathA : a;
+  uint8_t loB = (b < gen.pathB) ? b : gen.pathB, hiB = (b < gen.pathB) ? gen.pathB : b;
+  if (hiA >= loB)                                   // the sideways steps would run into each other: both go straight on
+  {
+    a = gen.pathA; b = gen.pathB;
+    loA = hiA = a; loB = hiB = b;
+  }
+  for (uint8_t c = loA; c <= hiA; c++) { if (set) m |= (1UL << c); else m &= ~(1UL << c); }
+  for (uint8_t c = loB; c <= hiB; c++) { if (set) m |= (1UL << c); else m &= ~(1UL << c); }
+  gen.pathA = a; gen.pathB = b;
+}
 
 void generateLaneBase(int16_t v)
 {
@@ -201,19 +229,13 @@ void generateLaneBase(int16_t v)
   else if (L.type == LANE_WATER && gen.leafRun)
   {
     L.kind = LEAF_KIND;                                   // leaves: they do not move
-    uint16_t m = 0;
+    uint32_t m = 0;
     for (uint8_t c = 0; c <= (PLAY_MAX_U - PLAY_MIN_U); c++)
     {
-      if ((rnd() & 7) < 2) m |= (1 << c);
+      if ((rnd() & 7) < 2) m |= (1UL << c);
     }
-    int8_t nc = (int8_t)gen.pathCol + (int8_t)(rnd() % 5) - 2;     // always a way across: from last lane's column to this one's
-    if (nc < 0) nc = 0;
-    if (nc > (PLAY_MAX_U - PLAY_MIN_U)) nc = PLAY_MAX_U - PLAY_MIN_U;
-    uint8_t lo = (nc < gen.pathCol) ? nc : gen.pathCol;
-    uint8_t hi = (nc < gen.pathCol) ? gen.pathCol : nc;
-    for (uint8_t c = lo; c <= hi; c++) m |= (1 << c);
-    gen.pathCol = nc;
-    L.bushMask = m;
+    stepPaths(m, true);
+    setLaneMask(L, m);
   }
   else if (L.type == LANE_WATER)
   {
@@ -224,20 +246,13 @@ void generateLaneBase(int16_t v)
   }
   else
   {
-    uint16_t m = 0;
+    uint32_t m = 0;
     for (uint8_t c = 0; c <= (PLAY_MAX_U - PLAY_MIN_U); c++)
     {
-      if ((rnd() & 7) < 3) m |= (1 << c);
+      if ((rnd() & 7) < 3) m |= (1UL << c);
     }
-    // keep a walkable corridor: from last lane's path column to this lane's
-    int8_t nc = (int8_t)gen.pathCol + (int8_t)(rnd() % 5) - 2;
-    if (nc < 0) nc = 0;
-    if (nc > (PLAY_MAX_U - PLAY_MIN_U)) nc = PLAY_MAX_U - PLAY_MIN_U;
-    uint8_t lo = (nc < gen.pathCol) ? nc : gen.pathCol;
-    uint8_t hi = (nc < gen.pathCol) ? gen.pathCol : nc;
-    for (uint8_t c = lo; c <= hi; c++) m &= ~(1 << c);
-    gen.pathCol = nc;
-    L.bushMask = m;
+    stepPaths(m, false);
+    setLaneMask(L, m);
   }
 }
 
@@ -251,8 +266,8 @@ void generateLane(int16_t v)
   uint8_t t = (r < 22) ? ITEM_CORN : (r < 25) ? ITEM_EGG : (r < 28) ? ITEM_HOURGLASS : (r < 31) ? ITEM_MAGNET : ITEM_NONE;
   if (!t) return;
   uint8_t c = rnd() % (PLAY_MAX_U - PLAY_MIN_U + 1);
-  if (L.type == LANE_GRASS && ((L.bushMask >> c) & 1)) return;
-  L.item = (t << 4) | c;
+  if (L.type == LANE_GRASS && ((laneMask(L) >> c) & 1)) return;
+  L.item = (t << 5) | c;
 }
 
 // make sure rows up to (centreRow + ROWS_AHEAD + 1) exist
@@ -270,7 +285,8 @@ void worldInit()
   gen.leafRun = false;
   sinkOn = false;
   gen.dir = 1;
-  gen.pathCol = (0 - PLAY_MIN_U);   // column of u = 0
+  gen.pathA = (-3 - PLAY_MIN_U);    // columns of u = -3 and u = +3
+  gen.pathB = (3 - PLAY_MIN_U);
   gen.top = -ROWS_BEHIND - 4;
   worldFrame = 0;
   extendWorld(0);
@@ -347,7 +363,7 @@ bool bushAt(int16_t v, int16_t u)
   const Lane &L = laneAt(v);
   if (L.type != LANE_GRASS) return false;
   if (u < PLAY_MIN_U || u > PLAY_MAX_U) return true;
-  return (L.bushMask >> (u - PLAY_MIN_U)) & 1;
+  return (laneMask(L) >> (u - PLAY_MIN_U)) & 1;
 }
 
 // is a car / truck overlapping a chicken centred on world X = x ?
