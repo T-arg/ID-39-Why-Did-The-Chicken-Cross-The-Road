@@ -84,6 +84,7 @@ void stateGamePause()
 void stateGameOver()
 {
   drawPlayField();                       // show where it went wrong
+  sprites.drawPlusMask(49, 20, gameOver_plus_mask, 0);
   if (arduboy.justPressed(A_BUTTON))     // A: back to the title screen
   {
     newGame = true;

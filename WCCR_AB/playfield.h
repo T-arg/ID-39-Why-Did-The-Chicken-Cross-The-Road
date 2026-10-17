@@ -60,6 +60,8 @@ static const unsigned char *fSpr[FRONT_MAX];
 static int16_t fX[FRONT_MAX], fY[FRONT_MAX];            // screen
 static int16_t fBX0[FRONT_MAX], fBY1[FRONT_MAX];        // world box: near end along X, far edge across Y
 static uint8_t fN;
+static uint8_t fFr[FRONT_MAX];                                    // their frames
+static uint8_t objFrame = 0;                                      // frame of the sprite drawObject() is about to draw (animated pickups)
 
 static inline bool rectsOverlap(int16_t x0, int16_t y0, int16_t w0, int16_t h0,
                                 int16_t x1, int16_t y1, int16_t w1, int16_t h1)
@@ -119,12 +121,12 @@ void drawObject(const unsigned char *spr, int16_t X, int16_t rowRel, int8_t ox, 
     {
       // in front of the chicken (footprint X +-3, Y +-3): chicken first, and remember this one
       drawChicken();
-      if (fN < FRONT_MAX) { fSpr[fN] = spr; fX[fN] = x; fY[fN] = y; fBX0[fN] = X + bx0; fBY1[fN] = Y + by1; fN++; }
+      if (fN < FRONT_MAX) { fSpr[fN] = spr; fFr[fN] = objFrame; fX[fN] = x; fY[fN] = y; fBX0[fN] = X + bx0; fBY1[fN] = Y + by1; fN++; }
     }
     else if (pDrawn)
     {
       // behind or under the chicken, but arriving after it: draw it, then put the chicken back on top
-      sprites.drawPlusMask(x, y, spr, 0);
+      sprites.drawPlusMask(x, y, spr, objFrame);
       if (player.characteristics & CH_VISIBLE)
       {
         int16_t cx0 = (x > pRX) ? x : pRX, cx1 = (x + w < pRX + 17) ? x + w : pRX + 17;
@@ -133,13 +135,13 @@ void drawObject(const unsigned char *spr, int16_t X, int16_t rowRel, int8_t ox, 
         for (uint8_t k = 0; k < fN; k++)
         {
           // only those that are really in front of this object as well
-          if (fBX0[k] >= (X + bx1) || fBY1[k] <= (Y + by0)) drawPlusMaskGated(fX[k], fY[k], fSpr[k], 0, cx0, cy0, cx1, cy1, spr, x, y);
+          if (fBX0[k] >= (X + bx1) || fBY1[k] <= (Y + by0)) drawPlusMaskGated(fX[k], fY[k], fSpr[k], fFr[k], cx0, cy0, cx1, cy1, spr, x, y);
         }
       }
       return;
     }
   }
-  sprites.drawPlusMask(x, y, spr, 0);
+  sprites.drawPlusMask(x, y, spr, objFrame);
 }
 
 
@@ -241,7 +243,10 @@ static void drawItem(const Lane &L, int16_t rr)
     case ITEM_MAGNET:    spr = magnetSprite; ox = magnetSprite_OX; oy = magnetSprite_OY; break;
     default: return;
   }
+  if (itemType(L) == ITEM_HOURGLASS) objFrame = (worldFrame >> 3) & 3;                                // the hourglass turns over: normal, mirrored, upside down, mirrored upside down
+  if (itemType(L) == ITEM_MAGNET) { byte s = (worldFrame >> 3) & 3; objFrame = (s == 3) ? 1 : s; }     // the magnet turns: 0, 1, 2, 1
   drawObject(spr, itemU(L) * 8, rr, ox, oy - (((worldFrame >> 3) & 1) ? 1 : 0), 0, 8, 0, 8);
+  objFrame = 0;
 }
 
 

@@ -15,6 +15,7 @@
 #define CHICKEN_FOOT_Y        21
 
 #define SPLASH_DROPS          30           // drops in the splash
+#define SPLASH_RISE           12           // frames the splash goes straight up before it opens
 
 // bits of player.characteristics
 #define CH_DIR_MASK           0b00000011   // hop / facing direction: 0 = UP, 1 = LEFT, 2 = DOWN, 3 = RIGHT
@@ -138,7 +139,7 @@ struct chickenRunner
     // an egg saves the chicken: it is set down on the nearest free grass cell (ahead first), safe for a moment
     bool tryEgg(bool lost)
     {
-      if (!eggs || (characteristics & CH_DEAD)) return false;
+      if (!eggs) return false;
       int16_t v0 = lost ? deadRow() + 2 : row() + 1;
       int16_t col0 = x >> 3;
       if (col0 < PLAY_MIN_U) col0 = PLAY_MIN_U;
@@ -157,7 +158,7 @@ struct chickenRunner
             x = fromX = toX = c * 8 + 4;
             y = fromY = toY = v * 8 + 4;
             lift = fromLift = toLift = 0;
-            characteristics &= ~(CH_JUMPING | CH_LOST);
+            characteristics &= ~(CH_JUMPING | CH_LOST | CH_DEAD | CH_SPLAT | CH_FEATHERS);
             characteristics |= CH_VISIBLE;
             jumpCounter = 0; queued = 0;
             invuln = 60;
@@ -172,7 +173,6 @@ struct chickenRunner
 
     void die(bool splat)
     {
-      if (tryEgg(false)) return;
       characteristics &= ~CH_JUMPING;
       characteristics |= CH_DEAD | (splat ? CH_SPLAT : 0);
       splashSeed = rnd() | 1;
@@ -182,7 +182,7 @@ struct chickenRunner
         y = ((y >> 3) << 3) + 1;                       // squash it against the side of the vehicle (its near face)
         jumpCounter = 0;
       }
-      if (!splat) characteristics &= ~CH_VISIBLE;      // fell in the water: gone, a splash takes over
+      if (!splat) { characteristics &= ~CH_VISIBLE; sfx(SFX_SPLASH, 3); }      // fell in the water: gone, a splash takes over
       queued = 0;
       deadTimer = 0;
       lift = 0;                                        // splash / splat happen at floor level
@@ -190,7 +190,6 @@ struct chickenRunner
 
     void dieFeathers()                                 // hit by a plane: the chicken bursts into feathers
     {
-      if (tryEgg(false)) return;
       characteristics &= ~(CH_JUMPING | CH_VISIBLE);
       characteristics |= CH_DEAD | CH_FEATHERS;
       splashSeed = rnd() | 1;
@@ -199,7 +198,6 @@ struct chickenRunner
 
     void dieLost()                                     // the screen scrolled past the chicken
     {
-      if (tryEgg(true)) return;
       characteristics &= ~CH_JUMPING;
       characteristics |= CH_DEAD | CH_LOST;
       queued = 0;
@@ -237,7 +235,7 @@ struct chickenRunner
       fromLift = liftAt(y >> 3, x); toLift = liftAt(ty >> 3, tx);
       jumpCounter = 0;
       characteristics |= CH_JUMPING;
-      sfx(sfxHop);
+      sfx(SFX_JUMP);
     }
 
     void queueHop(byte dir)
@@ -251,7 +249,7 @@ struct chickenRunner
     {
       byte t = itemType(L);
       L.item = 0;
-      if (t == ITEM_CORN)           { score = (score < 65000) ? score + 5 : score; sfx(sfxCoin); }
+      if (t == ITEM_CORN)           { score = (score < 65000) ? score + 5 : score; sfx(SFX_COIN); }
       else if (t == ITEM_EGG)       { if (eggs < MAX_EGGS) eggs++; else if (score < 65000) score += 10; }
       else if (t == ITEM_HOURGLASS) { hourglass = HOURGLASS_TIME; }
       else if (t == ITEM_MAGNET)    { magnet = MAGNET_TIME; }
@@ -264,6 +262,12 @@ struct chickenRunner
       jumpCounter = 0;
       if (row() > bestRow) { bestRow = row(); if (score < 65535) score++; }   // a point for every new row reached
       { Lane &PL = laneAt(row()); if (itemType(PL) && itemU(PL) == (x >> 3)) takeItem(PL); }   // pick up what is on this cell
+      {                                                             // a quick chain of hops must not skip the check of where it lands
+        const Lane &HL = laneAt(row());
+        if (HL.type == LANE_WATER && (isLeafLane(HL) ? !leafUnder(row(), x) : !logUnder(HL, x))) { die(false); return; }
+        if (!invuln && HL.type == LANE_ROAD && vehicleHit(HL, x)) { die(true); return; }
+        if (!invuln && HL.type == LANE_RUNWAY && planeHit(HL.kind ? laneAt(row() - 1) : HL, x)) { dieFeathers(); return; }
+      }
       if (queued)
       {
         byte q = queued - 1;
@@ -285,7 +289,10 @@ struct chickenRunner
       {
         deadTimer++;
         if (characteristics & CH_SPLAT) x += laneAt(row()).dx;                             // stuck to the vehicle, moves along with it
-        if (deadTimer > ((characteristics & CH_LOST) ? 12 : 40)) { gameState = STATE_GAME_OVER; }
+        if (deadTimer > ((characteristics & CH_LOST) ? 12 : 40))                           // the death animation has played
+        {
+          if (!tryEgg((characteristics & CH_LOST) != 0)) gameState = STATE_GAME_OVER;     // a golden egg brings the chicken back, else it is over
+        }
         return;
       }
 
@@ -294,7 +301,7 @@ struct chickenRunner
       {
         dropT--;
         byte i = DROP_LEN - dropT;
-        if (dropT == 0) sfx(sfxHop);                                   // touch down
+        if (dropT == 0) sfx(SFX_LAND);                                   // touch down
       }
       if (hourglass) hourglass--;
       if (magnet)
@@ -325,7 +332,7 @@ struct chickenRunner
         int16_t ex = (x - 4) - flyX[i], ey = (y - 4) - flyY[i];
         if (ex < 0) ex = -ex;
         if (ey < 0) ey = -ey;
-        if (ex + ey <= 3) { flyT[i] = 0; score = (score < 65000) ? score + 5 : score; sfx(sfxCoin); }   // touched the chicken: gone
+        if (ex + ey <= 3) { flyT[i] = 0; score = (score < 65000) ? score + 5 : score; sfx(SFX_COIN); }   // touched the chicken: gone
       }
       if (characteristics & CH_JUMPING)
       {
@@ -440,11 +447,11 @@ struct chickenRunner
 
         int8_t  vx = (int8_t)(r1 % 17) - 8;                             // sideways speed  -8..8  (used once the column has risen)
         int8_t  vy = 5 + (r2 % 8);                                      // upwards speed    5..12
-        int8_t  x0 = (int8_t)(r3 % 5) - 2;                              // starts as a narrow column around the feet
-        int8_t  y0 = (int8_t)(r4 % 5) - 2;
+        int8_t  x0 = (int8_t)(r3 % 3) - 1;                              // starts as a narrow column around the feet
+        int8_t  y0 = (int8_t)(r4 % 3) - 1;
         byte    t  = deadTimer - (r1 >> 6);                             // some drops start a few frames late
         if (deadTimer < (r1 >> 6)) continue;
-        int16_t dx = (t > 5) ? (vx * (int16_t)(t - 5)) >> 3 : 0;        // first straight up, then it spreads out
+        int16_t dx = (t > SPLASH_RISE) ? (vx * (int16_t)(t - SPLASH_RISE)) >> 3 : 0;   // first a tall column straight up, then it opens up
         int16_t dy = ((vy * (int16_t)t) >> 2) - ((int16_t)t * t >> 4);  // gravity
         if (dy < -3) continue;                                          // fell back into the water
         int16_t sx = cx + x0 + dx, sy = cy + y0 - dy;

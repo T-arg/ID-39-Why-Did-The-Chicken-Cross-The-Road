@@ -196,16 +196,72 @@ Song silentSong[] = {
   ATM_GOTO(0)
 };
 
-// the chicken hops: ONE short note that fades out
-ATM_SFX_TRACK(sfxHop, ATM_VOL(40), ATM_SL_VOL((uint8_t)-10), ATM_NOTE_A2, ATM_DELAY(4));
+// Sound effects: plain PROGMEM tracks (they end with ATM_STOP_CHAN) and a PROGMEM list, played with sfx(number)
+// the jump: one note that glides and fades
+const uint8_t chickJump[] PROGMEM = {
+  ATM_VOL(48),
+  ATM_SL_VOL((uint8_t)-6),
+  ATM_GLIS(1),
+  ATM_NOTE_C3,
+  ATM_DELAY(12),
+  ATM_STOP_CHAN
+};
+
+// touch down: ONE short low note that fades out
+const uint8_t chickLand[] PROGMEM = {
+  ATM_VOL(40),
+  ATM_SL_VOL((uint8_t)-10),
+  ATM_NOTE_A2,
+  ATM_DELAY(4),
+  ATM_STOP_CHAN
+};
 
 // corn: a coin (a short low note, then a higher one that rings out)
-ATM_SFX_TRACK(sfxCoin, ATM_VOL(40), ATM_NOTE_B3, ATM_DELAY(1), ATM_SL_VOL((uint8_t)-5), ATM_NOTE_E4, ATM_DELAY(8));
+const uint8_t chickCoin[] PROGMEM = {
+  ATM_VOL(40),
+  ATM_NOTE_B3,
+  ATM_DELAY(1),
+  ATM_SL_VOL((uint8_t)-5),
+  ATM_NOTE_E4,
+  ATM_DELAY(8),
+  ATM_STOP_CHAN
+};
+
+// fell in the water: noise that fades (channel 3 is the noise channel)
+const uint8_t chickSplash[] PROGMEM = {
+  ATM_VOL(48),
+  ATM_SL_VOL((uint8_t)-3),
+  ATM_DELAY(19),
+  ATM_STOP_CHAN
+};
+
+// hit by a plane: a soft trembling note that swells
+const uint8_t chickShopped[] PROGMEM = {
+  ATM_VOL(20),
+  ATM_SL_VOL(1),
+  ATM_TREM(6, 0),
+  ATM_DELAY(24),
+  ATM_STOP_CHAN
+};
+
+#define SFX_JUMP 0
+#define SFX_LAND 1
+#define SFX_COIN 2
+#define SFX_SPLASH 3
+#define SFX_SHOPPED 4
+const unsigned char * const PROGMEM soundFX[] =
+{
+  chickJump,
+  chickLand,
+  chickCoin,
+  chickSplash,
+  chickShopped,
+};
 
 // ATMlib does not look at the Arduboy sound setting, so we do it here
-void sfx(const uint8_t *track, byte ch = 1)
+void sfx(byte n, byte ch = 1)
 {
-  if (arduboy.audio.enabled()) ATM.playSfx(track, ch);
+  if (arduboy.audio.enabled()) ATM.playSfx((const uint8_t *)pgm_read_word(&soundFX[n]), ch);
 }
 
 // called once per frame: the title tune starts with the T-arg logo and plays on the title screen
