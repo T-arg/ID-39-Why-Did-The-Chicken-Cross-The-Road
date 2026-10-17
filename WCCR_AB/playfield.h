@@ -213,6 +213,22 @@ void drawGround()
 }
 
 
+// the lane that is being eaten right now: black diamonds, 8 frames, one per 8th of a row of scrolling.
+// When the last frame has been shown the scroll line has moved one row on and the frames start over.
+static void drawDeadEdge()
+{
+  int16_t v = deadRow();
+  int16_t vc = camY >> 3;
+  if (v < vc - ROWS_BEHIND || v > vc + ROWS_AHEAD) return;
+  int16_t rr = relY(v);
+  if (!bandVisible(rr)) return;
+  byte frame = scrollY & 7;
+  int16_t ulo = (camX - rr - SCREEN_CX - 16) >> 3;
+  for (int16_t u = ulo; u <= ((camX - rr - SCREEN_CX + 128) >> 3); u++)
+    sprites.drawErase(screenX(u * 8, rr), screenY(u * 8, rr) - 4, deadTile, frame);
+}
+
+
 // a pickup standing on its cell (bobs up and down a little)
 static void drawItem(const Lane &L, int16_t rr)
 {
@@ -322,6 +338,20 @@ void drawObjects()
 }
 
 
+// corn that the magnet has pulled loose, flying to the chicken (rises a little while it flies)
+static void drawFlyers()
+{
+  if (player.characteristics & CH_DEAD) return;
+  for (byte i = 0; i < MAGNET_FLY; i++)
+  {
+    if (!player.flyT[i]) continue;
+    int16_t z = player.flyT[i] >> 1; if (z > 7) z = 7;
+    int16_t fx = player.flyX[i] - camX, fy = player.flyY[i] - camY;
+    sprites.drawPlusMask(fx + fy + SCREEN_CX + cornSprite_OX, ((fx - fy) >> 1) + SCREEN_CY + cornSprite_OY - z, cornSprite, 0);
+  }
+}
+
+
 // score ///////////////////////////////////////////////////////////////////////
 // font 3 wide x 5 high: 5 rows per digit, 3 bits per row (bit 2 = left pixel)
 const unsigned char PROGMEM digitFont[10][5] =
@@ -381,7 +411,9 @@ static void drawHud()
 void drawPlayField()
 {
   drawGround();
+  drawDeadEdge();
   drawObjects();
+  drawFlyers();
   player.drawSplash();
   drawScore();
   drawHud();

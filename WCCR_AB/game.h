@@ -62,7 +62,7 @@ void stateGamePlaying()
   updateLanes(cr);
   player.update();
   updateCamera();
-  if (!(player.characteristics & CH_DEAD) && player.row() < deadRow()) player.dieLost();   // touched the black
+  if (!(player.characteristics & CH_DEAD) && player.row() < deadRow()) player.dieFeathers();   // touched the black: bursts into feathers
 
   drawPlayField();
 }

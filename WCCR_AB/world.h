@@ -66,6 +66,10 @@
 #define HOURGLASS_TIME    225    // frames (45 fps = 5 s)
 #define MAGNET_TIME       450    // 10 s
 #define MAX_EGGS          3
+#define MAGNET_RANGE      4      // the magnet reaches this many columns to each side
+#define MAGNET_AHEAD      4      // ... and this many rows ahead
+#define MAGNET_BACK       1      // ... and this many rows behind
+#define MAGNET_FLY        4      // pieces of corn that can fly at the same time
 
 struct __attribute__((packed)) Lane       // packed: no padding bytes (RAM is tight, RING lanes are kept)
 {

@@ -93,6 +93,8 @@ struct chickenRunner
     byte     dropT;               // > 0 while the chicken falls out of the sky (DROP_LEN .. 1)
     uint16_t hourglass;           // frames the scrolling is stopped
     uint16_t magnet;              // frames the magnet pulls in corn
+    int16_t  flyX[MAGNET_FLY], flyY[MAGNET_FLY];   // corn flying towards the chicken: world position of the cell origin
+    byte     flyT[MAGNET_FLY];    // frames in the air, 0 = free slot
 
     void set()
     {
@@ -115,6 +117,7 @@ struct chickenRunner
       score = 0;
       lift = fromLift = toLift = 0;
       eggs = 0; invuln = 0; hourglass = 0; magnet = 0; dropT = DROP_LEN;
+      for (byte i = 0; i < MAGNET_FLY; i++) flyT[i] = 0;
     }
 
     int16_t row() { return y >> 3; }
@@ -204,6 +207,19 @@ struct chickenRunner
       lift = 0;
     }
 
+    // would a hop in this direction end on something that holds the chicken ?
+    bool landSafe(byte dir)
+    {
+      int16_t tx = x + (int8_t)pgm_read_byte(&hopDX[dir]);
+      int16_t ty = y + (int8_t)pgm_read_byte(&hopDY[dir]);
+      if ((dir == HOP_UP) || (dir == HOP_DOWN)) tx = ((x >> 3) << 3) + 4;
+      int16_t tu = tx >> 3, tv = ty >> 3;
+      if (tu < PLAY_MIN_U || tu > PLAY_MAX_U || tv < deadRow() || bushAt(tv, tu)) return false;
+      const Lane &T = laneAt(tv);
+      if (T.type == LANE_WATER) return isLeafLane(T) ? leafUnder(tv, tx) : logUnder(T, tx);
+      return true;
+    }
+
     void startHop(byte dir)
     {
       characteristics = (characteristics & ~CH_DIR_MASK) | dir;      // always turn
@@ -256,6 +272,13 @@ struct chickenRunner
       }
     }
 
+    static int16_t flyStep(int16_t d)                                  // a quarter of the way, at least 2 px, never past the target
+    {
+      if (d > 0) { int16_t s = d >> 2; if (s < 2) s = 2; return (s > d) ? d : s; }
+      if (d < 0) { int16_t s = -((-d) >> 2); if (s > -2) s = -2; return (s < d) ? d : s; }
+      return 0;
+    }
+
     void update()
     {
       if (characteristics & CH_DEAD)
@@ -277,17 +300,33 @@ struct chickenRunner
       if (magnet)
       {
         magnet--;
-        if (arduboy.everyXFrames(3))                                  // pull in one corn at a time from the cells around
+        if (arduboy.everyXFrames(3))                                  // the magnet grabs one corn at a time from the cells around
         {
-          for (int16_t v = row() - 1; v <= row() + 4; v++)
+          for (int16_t v = row() - MAGNET_BACK; v <= row() + MAGNET_AHEAD; v++)
           {
             Lane &ML = laneAt(v);
             int16_t du = itemU(ML) - (x >> 3);
-            if (itemType(ML) == ITEM_CORN && du >= -4 && du <= 4) { takeItem(ML); break; }
+            if (itemType(ML) != ITEM_CORN || du < -MAGNET_RANGE || du > MAGNET_RANGE) continue;
+            byte s = 0;
+            while (s < MAGNET_FLY && flyT[s]) s++;
+            if (s == MAGNET_FLY) break;                                // all slots busy: next time
+            flyX[s] = itemU(ML) * 8; flyY[s] = v * 8; flyT[s] = 1;     // it leaves its cell and flies
+            ML.item = 0;
+            break;
           }
         }
       }
-
+      for (byte i = 0; i < MAGNET_FLY; i++)                           // the flying corn: fast at first, then it homes in
+      {
+        if (!flyT[i]) continue;
+        if (flyT[i] < 255) flyT[i]++;
+        flyX[i] += flyStep((x - 4) - flyX[i]);
+        flyY[i] += flyStep((y - 4) - flyY[i]);
+        int16_t ex = (x - 4) - flyX[i], ey = (y - 4) - flyY[i];
+        if (ex < 0) ex = -ex;
+        if (ey < 0) ey = -ey;
+        if (ex + ey <= 3) { flyT[i] = 0; score = (score < 65000) ? score + 5 : score; sfx(sfxCoin); }   // touched the chicken: gone
+      }
       if (characteristics & CH_JUMPING)
       {
         byte steps = HOP_STEPS + ((HOP_EXTRA && arduboy.everyXFrames(2)) ? 1 : 0);
@@ -321,6 +360,15 @@ struct chickenRunner
           if (!leafUnder(v, x)) { die(false); return; }       // leaf is under water: splash
         }
         else if (!logUnder(L, x)) { die(false); return; }     // splash
+        if (!isLeafLane(L) && (x <= (PLAY_MIN_U * 8) + 2 || x >= ((PLAY_MAX_U + 1) * 8) - 2))
+        {                                                  // the log carries the chicken to the side of the field: hop away from the border
+          byte in = (x <= (PLAY_MIN_U * 8) + 2) ? HOP_RIGHT : HOP_LEFT;
+          byte order[3] = { in, HOP_UP, HOP_DOWN };        // back in along the log if it holds, else onto the next lane
+          byte pick = in;
+          for (byte k = 0; k < 3; k++) if (landSafe(order[k])) { pick = order[k]; break; }
+          startHop(pick);
+          if (characteristics & CH_JUMPING) return;
+        }
         if (x < (PLAY_MIN_U * 8) - 4 || x > ((PLAY_MAX_U + 1) * 8) + 4) { die(false); return; }
       }
       else if (L.type == LANE_ROAD)
