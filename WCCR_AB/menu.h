@@ -18,50 +18,41 @@ void stateMenuIntro()
 
 void stateMenuMain()
 {
-  drawTitle();                                  // block letters, road and a hopping chicken (title.h)
-  
- 
-  if (arduboy.justPressed(RIGHT_BUTTON) && (menuSelection < 3))
-  {
+  drawTitle();                                  // the moving playfield, the logo and the menu (title.h)
 
-    menuSelection++;
-  }
-  if (arduboy.justPressed(LEFT_BUTTON) && (menuSelection > 0))
-  {
-
-    menuSelection--;
-  }
+  if (arduboy.justPressed(RIGHT_BUTTON) && (menuSelection < 3)) menuSelection++;
+  if (arduboy.justPressed(LEFT_BUTTON) && (menuSelection > 0)) menuSelection--;
   if (arduboy.justPressed(A_BUTTON | B_BUTTON))
   {
-
-    gameState = STATE_GAME_PLAYING;
-
-    
+    if      (menuSelection == 0) gameState = STATE_MENU_INFO;      // INFO
+    else if (menuSelection == 2) gameState = STATE_MENU_CONF;      // CONF
+    else if (menuSelection == 3) gameState = STATE_MENU_SDFX;      // JBOX
+    else                                                           // PLAY
+    {
+      titleReady = false;                       // the title builds a new world next time
+      newGame = true;
+      gameState = STATE_GAME_PLAYING;
+    }
   }
 }
 
+// INFO, CONF and JBOX: placeholders until they get a screen of their own (A / B goes back to the title)
 void stateMenuConf()
 {
-  
+  drawSoon(2);
+  if (arduboy.justPressed(A_BUTTON | B_BUTTON)) gameState = STATE_MENU_MAIN;
 }
 
 void stateMenuInfo()
 {
-
-  if (arduboy.justPressed(A_BUTTON | B_BUTTON))
-  {
-
-  }
+  drawSoon(0);
+  if (arduboy.justPressed(A_BUTTON | B_BUTTON)) gameState = STATE_MENU_MAIN;
 }
 
 void stateMenuSdfx()
 {
-  if (arduboy.justPressed(A_BUTTON | B_BUTTON))
-  {
-
-    menuSelection = STATE_MENU_SDFX;
-
-  }
+  drawSoon(3);
+  if (arduboy.justPressed(A_BUTTON | B_BUTTON)) gameState = STATE_MENU_MAIN;
 }
 
 #endif
