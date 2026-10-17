@@ -358,20 +358,20 @@ void drawScore()
 // eggs (lives) top left, active power-ups with a draining bar top right
 static void drawHud()
 {
-  for (byte i = 0; i < player.eggs; i++) sprites.drawPlusMask(2 + i * 12, 1, eggSprite, 0);
+  for (byte i = 0; i < player.eggs; i++) sprites.drawPlusMask(2 + i * 10, 1, HUD_plus_mask, 0);
   int16_t hx = 128 - 10;
   if (player.hourglass)
   {
-    sprites.drawPlusMask(hx, 1, hourSprite, 0);
-    arduboy.fillRect(hx - 1, 11, 9, 3, BLACK);
-    arduboy.fillRect(hx, 12, (uint32_t)player.hourglass * 7 / HOURGLASS_TIME + 1, 1, WHITE);
-    hx -= 14;
+    sprites.drawPlusMask(hx, 1, HUD_plus_mask, 1);
+    arduboy.fillRect(hx - 1, 10, 10, 3, BLACK);
+    arduboy.fillRect(hx, 11, (uint32_t)player.hourglass * 7 / HOURGLASS_TIME + 1, 1, WHITE);
+    hx -= 12;
   }
   if (player.magnet)
   {
-    sprites.drawPlusMask(hx, 1, magnetSprite, 0);
-    arduboy.fillRect(hx - 1, 17, 9, 3, BLACK);
-    arduboy.fillRect(hx, 18, (uint32_t)player.magnet * 7 / MAGNET_TIME + 1, 1, WHITE);
+    sprites.drawPlusMask(hx, 1, HUD_plus_mask, 2);
+    arduboy.fillRect(hx - 1, 10, 10, 3, BLACK);
+    arduboy.fillRect(hx, 11, (uint32_t)player.magnet * 7 / MAGNET_TIME + 1, 1, WHITE);
   }
 }
 
