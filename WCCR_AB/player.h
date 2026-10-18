@@ -231,6 +231,7 @@ struct chickenRunner
       splashSeed = rnd() | 1;
       if (splat)
       {
+        sfx(SFX_SPLAT, 3);
         if (laneAt(y >> 3).type == LANE_RUNWAY && laneAt(y >> 3).kind == 1) y -= 8;      // far lane of a runway: stick to the near side of the plane
         y = ((y >> 3) << 3) + 1;                       // squash it against the side of the vehicle (its near face)
         jumpCounter = 0;
@@ -245,6 +246,7 @@ struct chickenRunner
     {
       characteristics &= ~(CH_JUMPING | CH_VISIBLE);
       characteristics |= CH_DEAD | CH_FEATHERS;
+      sfx(SFX_SHOPPED, 3);                             // the plane kill sound (a death sound: it always plays)
       splashSeed = rnd() | 1;
       queued = 0; deadTimer = 0; jumpCounter = 0;
     }
@@ -288,7 +290,7 @@ struct chickenRunner
       fromLift = liftAt(y >> 3, x); toLift = liftAt(ty >> 3, tx);
       jumpCounter = 0;
       characteristics |= CH_JUMPING;
-      sfx(SFX_JUMP);
+      sfx(SFX_JUMP, 0);
     }
 
     void queueHop(byte dir)
@@ -302,7 +304,8 @@ struct chickenRunner
     {
       byte t = itemType(L);
       L.item = 0;
-      if (t == ITEM_CORN)           { score = (score < 65000) ? score + 5 : score; sfx(SFX_COIN); }
+      sfx(SFX_COIN, 1);                                 // corn, egg, hourglass and magnet: the same pick-up sound
+      if (t == ITEM_CORN)           { score = (score < 65000) ? score + 5 : score; }
       else if (t == ITEM_EGG)       { if (eggs < MAX_EGGS) eggs++; else if (score < 65000) score += 10; }
       else if (t == ITEM_HOURGLASS) { hourglass = HOURGLASS_TIME; }
       else if (t == ITEM_MAGNET)    { magnet = MAGNET_TIME; }
@@ -336,6 +339,8 @@ struct chickenRunner
       return 0;
     }
 
+    bool planeOver = false, vehOver = false;           // a plane / a car or truck is passing right in front of the chicken
+
     void update()
     {
       if (characteristics & CH_DEAD)
@@ -355,7 +360,7 @@ struct chickenRunner
       {
         dropT--;
         byte i = EGG_LEN - dropT;
-        if (i == 14) sfx(SFX_LAND);                                      // the egg touches down
+        if (i == 14) sfx(SFX_LAND, 0);                                      // the egg touches down
         if (dropT == 0) { shellX = x; shellY = y; shellT = SHELL_LEN; splashSeed = rnd() | 1; }   // it bursts: the chicken is there, the shell flies
       }
       if (hourglass) hourglass--;
@@ -387,7 +392,7 @@ struct chickenRunner
         int16_t ex = (x - 4) - flyX[i], ey = (y - 4) - flyY[i];
         if (ex < 0) ex = -ex;
         if (ey < 0) ey = -ey;
-        if (ex + ey <= 3) { flyT[i] = 0; score = (score < 65000) ? score + 5 : score; sfx(SFX_COIN); }   // touched the chicken: gone
+        if (ex + ey <= 3) { flyT[i] = 0; score = (score < 65000) ? score + 5 : score; sfx(SFX_COIN, 1); }   // touched the chicken: gone
       }
       if (characteristics & CH_JUMPING)
       {
@@ -408,6 +413,18 @@ struct chickenRunner
       if (!(characteristics & CH_JUMPING)) lift = liftAt(row(), x);
 
       const Lane &L = laneAt(row());
+
+      {                                                    // the lane right in front of the chicken: a plane, a car or a truck passes by
+        const Lane &RN = laneAt(row() + 1);
+        bool plane = (RN.type == LANE_RUNWAY && RN.kind == 0) && planeHit(RN, x);
+        const Lane &ON = laneAt(row());                                // ... or on a road: a car / truck gets within 2 tiles
+        bool honkTruck = false, veh = false;
+        if (ON.type == LANE_ROAD && vehicleNear(ON, x, 16))                { veh = true; honkTruck = ON.kind; }
+        else if (RN.type == LANE_ROAD && vehicleHit(RN, x))                { veh = true; honkTruck = RN.kind; }
+        if (plane && !planeOver) sfx(SFX_AIRPLANE, 3);                 // (sfx() lets it finish, only a death stops it)
+        if (veh && !vehOver) sfx(honkTruck ? SFX_HONK_TRUCK : SFX_HONK_CAR, 2);
+        planeOver = plane; vehOver = veh;
+      }
 
       if (!(characteristics & CH_JUMPING) && L.type == LANE_WATER)
       {

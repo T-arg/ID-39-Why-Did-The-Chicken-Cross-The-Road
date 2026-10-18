@@ -1,7 +1,6 @@
 #ifndef ATMCONFIG_H
 #define ATMCONFIG_H
 // trimmed: what Bass Fun, the sound effects and the intro tones use (octaves 2-4). ATM_FX_STOP must stay ON: every sound effect ends with ATM_STOP_CHAN
-#define ATM_FX_NOISE            0
 #define ATM_FX_VIBRATO          0
 #define ATM_FX_NOTE_CUT         0
 #define ATM_FX_CUE              0

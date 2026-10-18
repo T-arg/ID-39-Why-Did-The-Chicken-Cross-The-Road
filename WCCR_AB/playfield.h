@@ -299,8 +299,6 @@ void drawObjects()
         if (px + PLANE_LEN > xlo && px <= xlo + 176)
         {
           drawObject(planeSprite, px, rr - 8, planeSprite_OX, planeSprite_OY, 1, PLANE_LEN + 1, 1, 15);
-          const unsigned char* pr = ((worldFrame >> 1) & 3) == 0 ? propSprite0 : ((worldFrame >> 1) & 3) == 1 ? propSprite1 : ((worldFrame >> 1) & 3) == 2 ? propSprite2 : propSprite3;
-          drawObject(pr, px, rr - 8, propSprite0_OX, propSprite0_OY, 1, PLANE_LEN + 1, 1, 15);   // spinning propeller
         }
       }
       else                                              // a windsock at each end of the runway, at its near edge: limp, flying when a plane is coming

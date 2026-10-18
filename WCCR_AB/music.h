@@ -209,7 +209,7 @@ const uint8_t chickJump[] PROGMEM = {
 
 // touch down: ONE short low note that fades out
 const uint8_t chickLand[] PROGMEM = {
-  ATM_VOL(40),
+  ATM_VOL(48),
   ATM_SL_VOL((uint8_t)-10),
   ATM_NOTE_A2,
   ATM_DELAY(4),
@@ -218,7 +218,7 @@ const uint8_t chickLand[] PROGMEM = {
 
 // corn: a coin (a short low note, then a higher one that rings out)
 const uint8_t chickCoin[] PROGMEM = {
-  ATM_VOL(40),
+  ATM_VOL(48),
   ATM_NOTE_B3,
   ATM_DELAY(1),
   ATM_SL_VOL((uint8_t)-5),
@@ -237,9 +237,50 @@ const uint8_t chickSplash[] PROGMEM = {
 
 // hit by a plane: a soft trembling note that swells
 const uint8_t chickShopped[] PROGMEM = {
-  ATM_VOL(20),
+  ATM_VOL(48),
   ATM_SL_VOL(1),
   ATM_TREM(6, 0),
+  ATM_DELAY(24),
+  ATM_STOP_CHAN
+};
+
+// a plane passes: noise with a trembling volume, then it is gone
+const uint8_t airplane[] PROGMEM = {
+  ATM_VOL(48),
+  ATM_SL_VOL((uint8_t)-1),
+  ATM_TREM(19, 0),
+  ATM_NOISE(21),
+  ATM_DELAY(39),
+  ATM_NOISE_OFF,
+  ATM_DELAY(1),
+  ATM_STOP_CHAN
+};
+
+// run over by a car or truck: a short, hard burst of noise that dies away fast (channel 3, the noise channel)
+const uint8_t chickSplat[] PROGMEM = {
+  ATM_VOL(48),
+  ATM_SL_VOL((uint8_t)-6),
+  ATM_DELAY(11),
+  ATM_STOP_CHAN
+};
+
+// a car honks: the same note twice, a short one and a longer one
+const uint8_t honkCar[] PROGMEM = {
+  ATM_VOL(48),
+  ATM_NOTE_A4,
+  ATM_DELAY(3),
+  ATM_VOL(0),
+  ATM_DELAY(2),
+  ATM_VOL(48),
+  ATM_NOTE_A4,
+  ATM_DELAY(8),
+  ATM_STOP_CHAN
+};
+
+// a truck honks: one long, lower honk
+const uint8_t honkTruck[] PROGMEM = {
+  ATM_VOL(48),
+  ATM_NOTE_D3,
   ATM_DELAY(24),
   ATM_STOP_CHAN
 };
@@ -249,6 +290,10 @@ const uint8_t chickShopped[] PROGMEM = {
 #define SFX_COIN 2
 #define SFX_SPLASH 3
 #define SFX_SHOPPED 4
+#define SFX_AIRPLANE 5
+#define SFX_HONK_CAR 6
+#define SFX_HONK_TRUCK 7
+#define SFX_SPLAT 8
 const unsigned char * const PROGMEM soundFX[] =
 {
   chickJump,
@@ -256,12 +301,27 @@ const unsigned char * const PROGMEM soundFX[] =
   chickCoin,
   chickSplash,
   chickShopped,
+  airplane,
+  honkCar,
+  honkTruck,
+  chickSplat,
 };
 
-// ATMlib does not look at the Arduboy sound setting, so we do it here
+// ATMlib does not look at the Arduboy sound setting, so we do it here.
+// ATMlib has ONE effect slot: a new effect would cut the one that is playing. The plane and the honks are things the
+// chicken should hear to the end, so once one has started nothing else may replace it until it is over,
+// except the death sounds (splash, splat, plane kill).
+unsigned long sfxLockEnd = 0;
 void sfx(byte n, byte ch = 1)
 {
-  if (arduboy.audio.enabled()) ATM.playSfx((const uint8_t *)pgm_read_word(&soundFX[n]), ch);
+  if (!arduboy.audio.enabled()) return;
+  bool death = (n == SFX_SPLASH || n == SFX_SHOPPED || n == SFX_SPLAT);
+  if (!death && (long)(millis() - sfxLockEnd) < 0) return;                 // a plane / honk is still sounding
+  if      (death)                sfxLockEnd = 0;
+  else if (n == SFX_AIRPLANE)    sfxLockEnd = millis() + 1640;             // 41 ticks of 40 ms
+  else if (n == SFX_HONK_CAR)    sfxLockEnd = millis() + 520;              // 13 ticks (3 + 2 + 8)
+  else if (n == SFX_HONK_TRUCK)  sfxLockEnd = millis() + 1000;             // 25 ticks
+  ATM.playSfx((const uint8_t *)pgm_read_word(&soundFX[n]), ch);
 }
 
 // called once per frame: the title tune starts with the T-arg logo and plays on the title screen

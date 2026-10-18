@@ -382,6 +382,18 @@ bool vehicleHit(const Lane &L, int16_t x)
   return false;
 }
 
+// is a car / truck within 'm' px of a chicken centred on world X = x ? (the honk: m = 16 is two tiles)
+bool vehicleNear(const Lane &L, int16_t x, int16_t m)
+{
+  uint8_t len = laneObjLen(L);
+  for (uint8_t i = 0; i < L.count; i++)
+  {
+    int16_t p = laneObjPos(L, i, x - LANE_LOOP / 2) + 1;
+    if (p < x + 3 + m && p + len > x - 3 - m) return true;
+  }
+  return false;
+}
+
 // is there a log under a chicken centred on world X = x ?
 bool logUnder(const Lane &L, int16_t x)
 {
