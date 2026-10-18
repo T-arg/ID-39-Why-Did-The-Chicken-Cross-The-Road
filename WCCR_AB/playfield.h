@@ -80,7 +80,7 @@ static void drawChicken()
 // opaque in the 'gate' sprite (placed at gx, gy): used to repaint exactly what 'gate' has just painted over.
 static void drawPlusMaskGated(int16_t x, int16_t y, const unsigned char *bm, uint8_t frame,
                               int16_t cx0, int16_t cy0, int16_t cx1, int16_t cy1,
-                              const unsigned char *gate, int16_t gx, int16_t gy)
+                              const unsigned char *gate, int16_t gx, int16_t gy, bool flip = false)
 {
   int16_t w = pgm_read_byte(bm), h = pgm_read_byte(bm + 1);
   int16_t gw = pgm_read_byte(gate), gh = pgm_read_byte(gate + 1);
@@ -97,7 +97,7 @@ static void drawPlusMaskGated(int16_t x, int16_t y, const unsigned char *bm, uin
     for (int16_t xx = xa; xx < xb; xx++)
     {
       if (!(pgm_read_byte(gpage + (uint16_t)(xx - gx) * 2 + 1) & gbit)) continue;      // 'gate' is not here
-      const unsigned char *c = page + (uint16_t)(xx - x) * 2;
+      const unsigned char *c = page + (uint16_t)(flip ? (w - 1 - (xx - x)) : (xx - x)) * 2;
       if (pgm_read_byte(c + 1) & bit) arduboy.drawPixel(xx, yy, (pgm_read_byte(c) & bit) ? WHITE : BLACK);
     }
   }
@@ -131,7 +131,7 @@ void drawObject(const unsigned char *spr, int16_t X, int16_t rowRel, int8_t ox, 
       {
         int16_t cx0 = (x > pRX) ? x : pRX, cx1 = (x + w < pRX + 17) ? x + w : pRX + 17;
         int16_t cy0 = (y > pRY) ? y : pRY, cy1 = (y + h < pRY + 24) ? y + h : pRY + 24;
-        drawPlusMaskGated(pRX, pRY, player.spriteBitmap(), player.spriteFrame(), cx0, cy0, cx1, cy1, spr, x, y);
+        drawPlusMaskGated(pRX, pRY, player.spriteBitmap(), player.spriteFrame(), cx0, cy0, cx1, cy1, spr, x, y, player.spriteFlip());
         for (uint8_t k = 0; k < fN; k++)
         {
           // only those that are really in front of this object as well
@@ -243,9 +243,8 @@ static void drawItem(const Lane &L, int16_t rr)
     case ITEM_MAGNET:    spr = magnetSprite; ox = magnetSprite_OX; oy = magnetSprite_OY; break;
     default: return;
   }
-  if (itemType(L) == ITEM_HOURGLASS) objFrame = (worldFrame >> 3) & 3;                                // the hourglass turns over: normal, mirrored, upside down, mirrored upside down
-  if (itemType(L) == ITEM_MAGNET) { byte s = (worldFrame >> 3) & 3; objFrame = (s == 3) ? 1 : s; }     // the magnet turns: 0, 1, 2, 1
-  drawObject(spr, itemU(L) * 8, rr, ox, oy - (((worldFrame >> 3) & 1) ? 1 : 0), 0, 8, 0, 8);
+  if (itemType(L) >= ITEM_HOURGLASS) objFrame = (worldFrame >> 3) & 3;          // the hourglass and the magnet have 4 frames
+  drawObject(spr, itemU(L) * 8, rr, ox, oy - ((itemType(L) <= ITEM_EGG && ((worldFrame >> 3) & 1)) ? 1 : 0), 0, 8, 0, 8);     // corn and egg bob, the hourglass and magnet only turn
   objFrame = 0;
 }
 

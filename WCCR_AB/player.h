@@ -47,12 +47,24 @@ const unsigned char PROGMEM playerHopProgress[] =
   0,0,0,0,1,3,6,10,13,15,16,16,16,16,
 };
 
-// falling from the sky (at the start and after a golden egg): height in px for every frame, with one bounce at the end
-const unsigned char PROGMEM dropH[] =
+// the egg that hatches the chicken (at the start and after a golden egg): height in px and sprite frame for every frame.
+// It falls out of the sky (frame 0), bounces 2 px, lands (frame 1), bounces 1 px, lands (frame 2), waits, then bursts open.
+const unsigned char PROGMEM eggH[] =
 {
-  58, 58, 57, 55, 53, 49, 46, 41, 36, 30, 24, 16, 9, 0, 3, 5, 7, 8, 9, 9, 9, 8, 7, 5, 3, 0, 0,
+  58, 58, 57, 55, 53, 49, 46, 41, 36, 30, 24, 16, 9, 0,        // fall
+  1, 2, 2, 2, 1, 0,                                            // bounce 2 px
+  0, 1, 1, 1, 0,                                               // bounce 1 px
+  0, 0, 0, 0, 0, 0,                                            // wait
 };
-#define DROP_LEN              27
+const unsigned char PROGMEM eggF[] =
+{
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0,
+  1, 1, 1, 1, 1,
+  2, 2, 2, 2, 2, 2,
+};
+#define EGG_LEN               31
+#define SHELL_LEN             40                               // frames the shell pieces stay on the ground
 
 const int8_t PROGMEM hopDX[] = { 0, -8,  0,  8 };
 const int8_t PROGMEM hopDY[] = { 8,  0, -8,  0 };
@@ -76,6 +88,45 @@ int8_t liftAt(int16_t v, int16_t x)
   return logUnder(L, x) ? LOG_LIFT : 0;
 }
 
+// plus-mask sprite drawn mirrored left to right (pixel by pixel: only the chicken needs it)
+void drawPlusMaskFlip(int16_t x, int16_t y, const unsigned char *bm, byte frame)
+{
+  byte w = pgm_read_byte(bm), h = pgm_read_byte(bm + 1);
+  const unsigned char *d = bm + 2 + (uint16_t)frame * w * ((h + 7) >> 3) * 2;
+  for (byte c = 0; c < w; c++)
+  {
+    int16_t dx = x + c;
+    if (dx < 0 || dx >= 128) continue;
+    const unsigned char *col = d + (uint16_t)(w - 1 - c) * 2;
+    for (byte r = 0; r < h; r++)
+    {
+      const unsigned char *q = col + (uint16_t)(r >> 3) * w * 2;
+      byte bit = 1 << (r & 7);
+      if (pgm_read_byte(q + 1) & bit) arduboy.drawPixel(dx, y + r, (pgm_read_byte(q) & bit) ? WHITE : BLACK);
+    }
+  }
+}
+
+// the pieces of a burst egg: 11 of them fly up from the egg (at sx, sy = its foot) and land on the front half of an ellipse (rx, ry)
+const int8_t PROGMEM ringDX[11] = { 8, 8, 6, 5, 2, 0, -2, -5, -6, -8, -8 };
+const int8_t PROGMEM ringDY[11] = { 0, 2, 5, 6, 8, 8, 8, 6, 5, 2, 0 };
+#define SHELL_FLIGHT          8                                // frames in the air
+void drawShellPieces(int16_t sx, int16_t sy, byte age, int8_t rx, int8_t ry)
+{
+  int8_t t = (age < SHELL_FLIGHT) ? age : SHELL_FLIGHT;
+  int8_t arc = t * (SHELL_FLIGHT - t);                          // 0 .. 16: the height of the flight
+  for (byte i = 0; i < 11; i++)
+  {
+    int8_t kx = rx - (i & 3), ky = ry - ((i >> 2) & 1);         // every piece lands a little nearer or further
+    int16_t gx = ((int8_t)pgm_read_byte(&ringDX[i]) * kx) >> 3; // where it comes to rest, relative to the egg
+    int16_t gy = ((int8_t)pgm_read_byte(&ringDY[i]) * ky) >> 3;
+    int16_t px = sx + ((gx * t) >> 3);
+    int16_t py = sy - 6 + (((gy + 6) * t) >> 3) - ((arc * (4 + (i & 1))) >> 3);
+    if (i & 1) { arduboy.fillRect(px - 1, py - 1, 3, 3, BLACK); arduboy.drawPixel(px, py, WHITE); }
+    else       { arduboy.fillRect(px - 1, py - 1, 3, 2, BLACK); arduboy.drawPixel(px, py - 1, WHITE); }
+  }
+}
+
 struct chickenRunner
 {
   public:
@@ -91,7 +142,9 @@ struct chickenRunner
     int8_t  lift, fromLift, toLift;   // px the chicken is raised (standing on a log / leaf)
     byte     eggs;                // golden eggs = extra lives
     byte     invuln;              // frames of protection after an egg saved the chicken
-    byte     dropT;               // > 0 while the chicken falls out of the sky (DROP_LEN .. 1)
+    byte     dropT;               // > 0 while the egg is about to hatch the chicken (EGG_LEN .. 1)
+    byte     shellT;              // > 0 while the shell pieces fly and lie around
+    int16_t  shellX, shellY;      // where the egg burst
     uint16_t hourglass;           // frames the scrolling is stopped
     uint16_t magnet;              // frames the magnet pulls in corn
     int16_t  flyX[MAGNET_FLY], flyY[MAGNET_FLY];   // corn flying towards the chicken: world position of the cell origin
@@ -117,7 +170,7 @@ struct chickenRunner
       bestRow = 0;
       score = 0;
       lift = fromLift = toLift = 0;
-      eggs = 0; invuln = 0; hourglass = 0; magnet = 0; dropT = DROP_LEN;
+      eggs = 0; invuln = 0; hourglass = 0; magnet = 0; dropT = EGG_LEN; shellT = 0;
       for (byte i = 0; i < MAGNET_FLY; i++) flyT[i] = 0;
     }
 
@@ -162,7 +215,7 @@ struct chickenRunner
             characteristics |= CH_VISIBLE;
             jumpCounter = 0; queued = 0;
             invuln = 60;
-            dropT = DROP_LEN;                                            // falls out of the sky again
+            dropT = EGG_LEN; shellT = 0;                                 // a new egg comes down and hatches
             if (row() > bestRow) bestRow = row();
             return true;
           }
@@ -287,7 +340,7 @@ struct chickenRunner
     {
       if (characteristics & CH_DEAD)
       {
-        deadTimer++;
+        deadTimer++; shellT = 0;
         if (characteristics & CH_SPLAT) x += laneAt(row()).dx;                             // stuck to the vehicle, moves along with it
         if (deadTimer > ((characteristics & CH_LOST) ? 12 : 40))                           // the death animation has played
         {
@@ -296,12 +349,14 @@ struct chickenRunner
         return;
       }
 
-      if (invuln) invuln--;
+      if (invuln && !dropT) invuln--;
+      if (shellT) shellT--;
       if (dropT)
       {
         dropT--;
-        byte i = DROP_LEN - dropT;
-        if (dropT == 0) sfx(SFX_LAND);                                   // touch down
+        byte i = EGG_LEN - dropT;
+        if (i == 14) sfx(SFX_LAND);                                      // the egg touches down
+        if (dropT == 0) { shellX = x; shellY = y; shellT = SHELL_LEN; splashSeed = rnd() | 1; }   // it bursts: the chicken is there, the shell flies
       }
       if (hourglass) hourglass--;
       if (magnet)
@@ -394,7 +449,7 @@ struct chickenRunner
       int16_t sx = (x - camX) + (y - camY) + SCREEN_CX;
       int16_t sy = (((x - camX) - (y - camY)) >> 1) + SCREEN_CY;
       *px = sx - CHICKEN_FOOT_X;
-      *py = sy - CHICKEN_FOOT_Y - pgm_read_byte(&playerY[jumpCounter]) - lift - (dropT ? pgm_read_byte(&dropH[DROP_LEN - dropT]) : 0);
+      *py = sy - CHICKEN_FOOT_Y - pgm_read_byte(&playerY[jumpCounter]) - lift;
     }
 
     // splash of pixels where the chicken went into the water (drawn on top of everything)
@@ -429,8 +484,17 @@ struct chickenRunner
       }
     }
 
+    // the shell pieces of the egg: they burst up from the egg and fall in a ring around the chicken
+    void drawShell()
+    {
+      int16_t sx = (shellX - camX) + (shellY - camY) + SCREEN_CX;
+      int16_t sy = (((shellX - camX) - (shellY - camY)) >> 1) + SCREEN_CY;
+      drawShellPieces(sx, sy, SHELL_LEN - shellT, 13, 6);
+    }
+
     void drawSplash()
     {
+      if (shellT && !(characteristics & CH_DEAD)) drawShell();
       if ((characteristics & CH_DEAD) && (characteristics & CH_FEATHERS)) { drawFeathers(); return; }
       if (!(characteristics & CH_DEAD) || (characteristics & (CH_SPLAT | CH_LOST)) || deadTimer > 38) return;
       int16_t px, py;
@@ -474,21 +538,32 @@ struct chickenRunner
       return (characteristics & CH_SPLAT) ? chickenFlatSprite : Chicken_plus_mask;
     }
 
+    bool spriteFlip() { return !(characteristics & CH_SPLAT) && (characteristics & 1); }     // facing LEFT or RIGHT
+
     byte spriteFrame()
     {
       if (characteristics & CH_SPLAT) return 0;
       return pgm_read_byte(&playerJumpPattern[jumpCounter]) +
-             (3 * (characteristics & CH_DIR_MASK));
+             (3 * ((characteristics & CH_DIR_MASK) >> 1));      // LEFT / RIGHT use the UP / DOWN frames, mirrored
     }
 
     // draws the chicken sprite (called from the playfield, in the right order)
     void drawSprite()
     {
       if (!(characteristics & CH_VISIBLE)) return;
-      if (invuln && !dropT && ((invuln >> 2) & 1)) return;                  // blinking while protected
+      if (dropT)                                                            // the egg, before the chicken is there
+      {
+        byte i = EGG_LEN - dropT;
+        int16_t ex = (x - camX) + (y - camY) + SCREEN_CX;
+        int16_t ey = (((x - camX) - (y - camY)) >> 1) + SCREEN_CY;
+        sprites.drawPlusMask(ex - 5, ey - 11 - pgm_read_byte(&eggH[i]), eggSprite, pgm_read_byte(&eggF[i]));
+        return;
+      }
+      if (invuln && ((invuln >> 2) & 1)) return;                            // blinking while protected
       int16_t px, py;
       spriteTopLeft(&px, &py);
-      sprites.drawPlusMask(px, py, spriteBitmap(), spriteFrame());
+      if (spriteFlip()) drawPlusMaskFlip(px, py, spriteBitmap(), spriteFrame());
+      else sprites.drawPlusMask(px, py, spriteBitmap(), spriteFrame());
     }
 };
 
