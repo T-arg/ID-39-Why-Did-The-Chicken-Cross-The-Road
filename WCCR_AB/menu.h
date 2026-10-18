@@ -20,13 +20,12 @@ void stateMenuMain()
 {
   drawTitle();                                  // the moving playfield, the logo and the menu (title.h)
 
-  if (arduboy.justPressed(RIGHT_BUTTON) && (menuSelection < 3)) menuSelection++;
+  if (arduboy.justPressed(RIGHT_BUTTON) && (menuSelection < 2)) menuSelection++;
   if (arduboy.justPressed(LEFT_BUTTON) && (menuSelection > 0)) menuSelection--;
   if (arduboy.justPressed(A_BUTTON | B_BUTTON))
   {
     if      (menuSelection == 0) gameState = STATE_MENU_INFO;      // INFO
     else if (menuSelection == 2) gameState = STATE_MENU_CONF;      // CONF
-    else if (menuSelection == 3) gameState = STATE_MENU_SDFX;      // JBOX
     else                                                           // PLAY
     {
       titleReady = false;                       // the title builds a new world next time
@@ -36,23 +35,24 @@ void stateMenuMain()
   }
 }
 
-// INFO, CONF and JBOX: placeholders until they get a screen of their own (A / B goes back to the title)
-void stateMenuConf()
+// INFO (CREATED BY JO3RI) and CONF (SOUND ON / OFF): A / B goes back to the title
+void stateMenuConf()                              // SOUND: LEFT = ON, RIGHT = OFF, A / B goes back
 {
-  drawSoon(2);
+  drawConf();
+  if (arduboy.justPressed(LEFT_BUTTON)) arduboy.audio.on();
+  if (arduboy.justPressed(RIGHT_BUTTON)) arduboy.audio.off();
   if (arduboy.justPressed(A_BUTTON | B_BUTTON)) gameState = STATE_MENU_MAIN;
 }
 
 void stateMenuInfo()
 {
-  drawSoon(0);
+  drawInfo();
   if (arduboy.justPressed(A_BUTTON | B_BUTTON)) gameState = STATE_MENU_MAIN;
 }
 
-void stateMenuSdfx()
+void stateMenuSdfx()                              // (the jukebox is gone: nothing leads here any more)
 {
-  drawSoon(3);
-  if (arduboy.justPressed(A_BUTTON | B_BUTTON)) gameState = STATE_MENU_MAIN;
+  gameState = STATE_MENU_MAIN;
 }
 
 #endif

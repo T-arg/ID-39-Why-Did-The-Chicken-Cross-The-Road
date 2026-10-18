@@ -72,22 +72,8 @@ void drawLogo()
   }
 }
 
-// tiny 3 x 5 letters, only what the "SOON" box needs (bit 2 = left pixel)
-const char PROGMEM glyphChars[] = "SON";
-const unsigned char PROGMEM glyphs[3][5] = { {7,4,7,1,7}, {7,5,5,5,7}, {5,7,7,5,5} };
-
-void drawGlyph(int16_t x, int16_t y, char ch, byte color)
-{
-  byte i = 0;
-  while (i < 2 && pgm_read_byte(&glyphChars[i]) != ch) i++;
-  for (byte r = 0; r < 5; r++)
-  {
-    byte bits = pgm_read_byte(&glyphs[i][r]);
-    for (byte c = 0; c < 3; c++) if (bits & (4 >> c)) arduboy.drawPixel(x + c, y + r, color);
-  }
-}
-
-// the four menu words INFO PLAY CONF JBOX as 30 x 8 buttons (image only, drawn over a black band; menuSelection 0..3)
+// the three menu words INFO PLAY CONF as 30 x 8 buttons (image only, drawn over a black band; menuSelection 0..2)
+#define MENU_X0  17                                     // the three buttons are centred (30 wide, 2 apart)
 #define MENU_Y   52
 const unsigned char PROGMEM menuWords[] =
 {
@@ -98,8 +84,6 @@ const unsigned char PROGMEM menuWords[] =
   0x10, 0x7a, 0x7a, 0x6a, 0x6a, 0x7e, 0x3c, 0x42, 0x5e, 0x7e, 0x7e, 0x30, 0x3e, 0x1e, 0x00,
   0x00, 0x3c, 0x7e, 0x7e, 0x7e, 0x76, 0x76, 0x30, 0x0c, 0x7e, 0x7e, 0x72, 0x72, 0x7e, 0x3c,
   0x42, 0x7e, 0x7e, 0x7e, 0x04, 0x08, 0x7e, 0x00, 0x7e, 0x7e, 0x7e, 0x16, 0x06, 0x06, 0x00,
-  0x00, 0x38, 0x7a, 0x72, 0x7e, 0x7e, 0x7e, 0x3e, 0x40, 0x7e, 0x7e, 0x6a, 0x6a, 0x7e, 0x34,
-  0x08, 0x7c, 0x7e, 0x72, 0x72, 0x7e, 0x3c, 0x42, 0x76, 0x7e, 0x7e, 0x1c, 0x7e, 0x76, 0x00,
 };
 
 void drawWord(int16_t x, int16_t y, byte item)
@@ -111,12 +95,20 @@ void drawWord(int16_t x, int16_t y, byte item)
 byte    menuAnim = 0;
 const unsigned char PROGMEM eggBounce[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 2, 2, 1, 0, 0, 0 };
 
+// the black band at the menu row, and the egg that bounces above the current choice (x = left edge of the egg)
+void drawBand() { arduboy.fillRect(0, MENU_Y, 128, 8, BLACK); }
+
+void drawEgg(int16_t x)
+{
+  sprites.drawPlusMask(x, MENU_Y - 12 - pgm_read_byte(&eggBounce[(menuAnim >> 1) & 15]), eggSprite, 0);
+  menuAnim++;
+}
+
 void drawMenu()
 {
-  arduboy.fillRect(0, MENU_Y, 128, 8, BLACK);                  // a black band behind the words
-  for (byte i = 0; i < 4; i++) drawWord(1 + i * 32, MENU_Y, i);
-  sprites.drawPlusMask(1 + menuSelection * 32 + 10, MENU_Y - 12 - pgm_read_byte(&eggBounce[(menuAnim >> 1) & 15]), eggSprite, 0);
-  menuAnim++;
+  drawBand();
+  for (byte i = 0; i < 3; i++) drawWord(MENU_X0 + i * 32, MENU_Y, i);
+  drawEgg(MENU_X0 + menuSelection * 32 + 10);
 }
 
 // the world that scrolls by behind the title (no chicken)
@@ -147,20 +139,70 @@ void titleWorld()
 
 void drawTitle()
 {
-  if (menuSelection > 3) menuSelection = 1;             // PLAY is pre-selected
+  if (menuSelection > 2) menuSelection = 1;             // PLAY is pre-selected
   titleWorld();
   drawLogo();
   drawMenu();
 }
 
-// INFO, CONF and JBOX are not there yet: a small "SOON" box over the moving playfield
-void drawSoon(byte item)
+// the info screen: the logo stays, the band shows CREATED BY JO3RI (image only, drawn over the black band)
+const unsigned char PROGMEM infoBy[] =
+{
+  15, 8,
+  0x00, 0x7e, 0x7e, 0x7e, 0x7e, 0x4a, 0x7e, 0x34, 0x4a, 0x7e, 0x7e, 0x78, 0x3e, 0x1e, 0x00,
+};
+const unsigned char PROGMEM infoCreated[] =
+{
+  45, 8,
+  0x00, 0x3c, 0x7e, 0x7e, 0x7a, 0x7a, 0x7a, 0x38, 0x42, 0x7e, 0x7e, 0x0a, 0x7a, 0x74, 0x0a,
+  0x7e, 0x7e, 0x6a, 0x6e, 0x2c, 0x52, 0x7a, 0x6a, 0x6e, 0x7e, 0x3c, 0x02, 0x7e, 0x7e, 0x7e,
+  0x06, 0x36, 0x78, 0x7e, 0x7e, 0x6a, 0x6e, 0x2c, 0x52, 0x7e, 0x7e, 0x72, 0x7e, 0x3c, 0x00,
+};
+const unsigned char PROGMEM infoJo3ri[] =
+{
+  33, 8,
+  0x00, 0x38, 0x7a, 0x72, 0x7e, 0x7e, 0x7e, 0x3c, 0x42, 0x7e, 0x72, 0x72, 0x7e, 0x3c, 0x42,
+  0x6a, 0x7e, 0x7e, 0x7e, 0x3c, 0x42, 0x7e, 0x7e, 0x0a, 0x7a, 0x74, 0x0a, 0x7e, 0x7e, 0x7e,
+  0x7a, 0x7a, 0x00,
+};
+
+void drawInfo()
 {
   titleWorld();
-  arduboy.fillRect(46, 18, 36, 28, BLACK);
-  arduboy.drawRect(47, 19, 34, 26, WHITE);
-  drawWord(49, 22, item);
-  drawGlyph(56, 35, 'S', WHITE); drawGlyph(60, 35, 'O', WHITE); drawGlyph(64, 35, 'O', WHITE); drawGlyph(68, 35, 'N', WHITE);
+  drawLogo();
+  drawBand();
+  sprites.drawOverwrite(13, MENU_Y, infoCreated, 0);
+  sprites.drawOverwrite(62, MENU_Y, infoBy, 0);
+  sprites.drawOverwrite(81, MENU_Y, infoJo3ri, 0);
+}
+
+// the sound screen: the logo stays, the band shows SOUND ON OFF, the egg bounces above the current setting
+// (placeholder words, to be replaced by the real ones)
+const unsigned char PROGMEM confSound[] =
+{
+  33, 8,
+  0x00, 0x24, 0x6e, 0x6e, 0x7e, 0x7a, 0x7a, 0x32, 0x4c, 0x7e, 0x72, 0x72, 0x7e, 0x3c, 0x42, 0x7e, 0x7e, 0x78, 0x7e, 0x3e, 0x40, 0x7e, 0x7e, 0x04, 0x08, 0x7e, 0x00, 0x7e, 0x7e, 0x72, 0x7e, 0x3c, 0x00,
+};
+const unsigned char PROGMEM confOn[] =
+{
+  15, 8,
+  0x00, 0x3c, 0x7e, 0x7e, 0x72, 0x72, 0x7e, 0x3c, 0x42, 0x7e, 0x7e, 0x04, 0x08, 0x7e, 0x00,
+};
+const unsigned char PROGMEM confOff[] =
+{
+  20, 8,
+  0x00, 0x3c, 0x7e, 0x7e, 0x72, 0x72, 0x7e, 0x3c, 0x42, 0x7e, 0x7e, 0x16, 0x66, 0x78, 0x7e, 0x7e, 0x16, 0x06, 0x06, 0x00,
+};
+
+void drawConf()
+{
+  titleWorld();
+  drawLogo();
+  drawBand();
+  sprites.drawOverwrite(22, MENU_Y, confSound, 0);
+  sprites.drawOverwrite(63, MENU_Y, confOn, 0);
+  sprites.drawOverwrite(86, MENU_Y, confOff, 0);
+  drawEgg(arduboy.audio.enabled() ? 65 : 90);
 }
 
 #endif

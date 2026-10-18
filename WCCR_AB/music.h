@@ -268,7 +268,7 @@ void sfx(byte n, byte ch = 1)
 bool musicOn = false;
 void musicUpdate()
 {
-  bool want = arduboy.audio.enabled() && (gameState == STATE_MENU_MAIN || (gameState == STATE_MENU_INTRO && introFrame >= INTRO_FRAMES));   // from the T-arg logo on
+  bool want = arduboy.audio.enabled() && (gameState == STATE_MENU_MAIN || gameState == STATE_MENU_CONF || gameState == STATE_MENU_INFO || (gameState == STATE_MENU_INTRO && introFrame >= INTRO_FRAMES));   // from the T-arg logo on
   if (want == musicOn) return;
   musicOn = want;
   if (want) ATM.play(bassFun);
