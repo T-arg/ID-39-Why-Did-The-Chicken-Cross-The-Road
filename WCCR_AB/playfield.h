@@ -299,6 +299,7 @@ void drawObjects()
         if (px + PLANE_LEN > xlo && px <= xlo + 176)
         {
           drawObject(planeSprite, px, rr - 8, planeSprite_OX, planeSprite_OY, 1, PLANE_LEN + 1, 1, 15);
+          if (gameState == STATE_GAME_PLAYING && !(worldFrame & 63)) sfx(SFX_AIRPLANE);   // the propeller stutters while a plane is in view
         }
       }
       else                                              // a windsock at each end of the runway, at its near edge: limp, flying when a plane is coming

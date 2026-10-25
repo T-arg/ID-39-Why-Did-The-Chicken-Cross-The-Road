@@ -244,15 +244,17 @@ const uint8_t chickShopped[] PROGMEM = {
   ATM_STOP_CHAN
 };
 
-// a plane passes: noise with a trembling volume, then it is gone
+// a plane passes: a fast stuttering low C on channel 1. The tempo is doubled-plus for it (60 ticks a second instead of 25),
+// and a tremolo that swings the volume between 1 and 32 (or 63 and 32) every tick makes the stutter: 30 blips a second.
+// sfx() puts the tempo back to 25 before any other effect, so an interrupted plane cannot leave it fast.
 const uint8_t airplane[] PROGMEM = {
-  ATM_VOL(48),
-  ATM_SL_VOL((uint8_t)-1),
-  ATM_TREM(19, 0),
-  ATM_NOISE(21),
-  ATM_DELAY(39),
-  ATM_NOISE_OFF,
-  ATM_DELAY(1),
+  ATM_SET_TEMPO(60),
+  ATM_VOL(32),
+  ATM_TREM(31, 0),
+  ATM_NOTE_C2,
+  ATM_DELAY(58),
+  ATM_TREM_OFF,
+  ATM_SET_TEMPO(25),
   ATM_STOP_CHAN
 };
 
@@ -308,19 +310,22 @@ const unsigned char * const PROGMEM soundFX[] =
 };
 
 // ATMlib does not look at the Arduboy sound setting, so we do it here.
-// ATMlib has ONE effect slot: a new effect would cut the one that is playing. The plane and the honks are things the
-// chicken should hear to the end, so once one has started nothing else may replace it until it is over,
-// except the death sounds (splash, splat, plane kill).
+// ATMlib has ONE effect slot: a new effect would cut the one that is playing. So every effect has a priority and a length
+// (in ticks of 40 ms) and one that is still sounding is only replaced by an effect of the same or a higher priority:
+//   3 kills (splash, plane kill, splat)  >  2 pick-ups (corn)  >  1 cars, trucks and planes  >  0 the hop (jump, land)
+// (two vehicle sounds never replace each other: a honk or a plane is heard to the end.)
+const uint8_t sfxPri[] PROGMEM = { 0, 0, 2, 3, 3, 1, 1, 1, 3 };         // by SFX number
+const uint8_t sfxLen[] PROGMEM = { 12, 4, 9, 19, 24, 24, 13, 25, 11 };  // ticks of 40 ms
 unsigned long sfxLockEnd = 0;
+byte sfxCur = 0;
 void sfx(byte n, byte ch = 1)
 {
   if (!arduboy.audio.enabled()) return;
-  bool death = (n == SFX_SPLASH || n == SFX_SHOPPED || n == SFX_SPLAT);
-  if (!death && (long)(millis() - sfxLockEnd) < 0) return;                 // a plane / honk is still sounding
-  if      (death)                sfxLockEnd = 0;
-  else if (n == SFX_AIRPLANE)    sfxLockEnd = millis() + 1640;             // 41 ticks of 40 ms
-  else if (n == SFX_HONK_CAR)    sfxLockEnd = millis() + 520;              // 13 ticks (3 + 2 + 8)
-  else if (n == SFX_HONK_TRUCK)  sfxLockEnd = millis() + 1000;             // 25 ticks
+  byte pri = pgm_read_byte(&sfxPri[n]);
+  if ((long)(millis() - sfxLockEnd) < 0 && (pri < sfxCur || (pri == 1 && sfxCur == 1))) return;   // something more important is still sounding
+  sfxCur = pri;
+  sfxLockEnd = millis() + pgm_read_byte(&sfxLen[n]) * 40UL;
+  if (n != SFX_AIRPLANE) { tickRate = 25; cia = 15625 / 25; }              // the plane runs the tempo up: back to normal
   ATM.playSfx((const uint8_t *)pgm_read_word(&soundFX[n]), ch);
 }
 
